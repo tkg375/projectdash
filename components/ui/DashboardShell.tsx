@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 
 const NAV = [
   {
-    label: 'Overview', href: '/',
+    label: 'Overview', href: '/dashboard',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
@@ -83,7 +83,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
     <>
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {NAV.map(({ label, href, icon, color }) => {
-          const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+          const active = href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href);
           return (
             <Link
               key={href}

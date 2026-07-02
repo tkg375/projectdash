@@ -22,7 +22,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        router.push('/');
+        router.push('/dashboard');
       } else {
         const data = await res.json() as { error?: string };
         setError(data.error || 'Login failed');
