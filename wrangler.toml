@@ -1,0 +1,62 @@
+account_id = "3869ffbbf462deee55a7a0b1880ffb84"
+name = "project-dash"
+main = ".open-next/worker.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+assets = { directory = ".open-next/assets", binding = "ASSETS" }
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "project-dash-db"
+database_id = "b5dbba82-b2c2-4943-919b-f549b2054e1f"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "project-dash-media"
+
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "90f191fd4ae04a1fbb69f2ccfafd48e1"
+
+# Queue producers only — the app sends messages but does NOT consume them
+# Consumption + cron triggers are handled by workers/wrangler.toml
+[[queues.producers]]
+queue = "content-generation"
+binding = "CONTENT_GENERATION_QUEUE"
+
+[[queues.producers]]
+queue = "content-publishing"
+binding = "CONTENT_PUBLISHING_QUEUE"
+
+[[queues.producers]]
+queue = "social-posting"
+binding = "SOCIAL_POSTING_QUEUE"
+
+[[queues.producers]]
+queue = "analytics-sync"
+binding = "ANALYTICS_SYNC_QUEUE"
+
+[[queues.producers]]
+queue = "email-dispatch"
+binding = "EMAIL_DISPATCH_QUEUE"
+
+[[queues.producers]]
+queue = "seo-tasks"
+binding = "SEO_TASKS_QUEUE"
+
+[vars]
+ENVIRONMENT = "production"
+APP_URL = "https://project-dash.tgordo03.workers.dev"
+
+# Secrets (set via: npx wrangler secret put <NAME>)
+# OWNER_EMAIL, OWNER_PASSWORD_HASH, SESSION_SECRET, ENCRYPTION_KEY
+# ANTHROPIC_API_KEY, OPENAI_API_KEY
+# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SES_REGION
+# TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET
+# LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET
+# FACEBOOK_APP_ID, FACEBOOK_APP_SECRET
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+# SERPER_API_KEY

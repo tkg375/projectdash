@@ -154,7 +154,10 @@ async function publishSchedulerJob(env: WorkerEnv): Promise<void> {
       }
 
       if (socialAccountId) {
-        // Queue for social posting
+        // Mark as queued immediately so the next cron tick doesn't re-pick it
+        await env.DB.prepare(
+          `UPDATE content_items SET status = 'queued', updated_at = unixepoch() WHERE id = ?`
+        ).bind(item.id).run();
         await env.SOCIAL_POSTING_QUEUE.send({
           jobId: generateId(),
           jobType: 'post_social',
@@ -162,7 +165,10 @@ async function publishSchedulerJob(env: WorkerEnv): Promise<void> {
           payload: { contentItemId: item.id, socialAccountId },
         });
       } else if (item.cms_connection_id) {
-        // Queue for CMS publishing
+        // Mark as queued immediately so the next cron tick doesn't re-pick it
+        await env.DB.prepare(
+          `UPDATE content_items SET status = 'queued', updated_at = unixepoch() WHERE id = ?`
+        ).bind(item.id).run();
         await env.CONTENT_PUBLISHING_QUEUE.send({
           jobId: generateId(),
           jobType: 'publish_content',

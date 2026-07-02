@@ -15,30 +15,23 @@ Target audience: ${audience.age_range || ''} ${audience.interests?.join(', ') ||
 ${pillars.length ? `Content pillars: ${pillars.join(', ')}` : ''}
 ${brand.website_url ? `Website URL: ${brand.website_url} — use this exact URL in content, never write placeholder text like [link] or [website].` : ''}
 Write only the content — no meta-commentary or explanations. Never use placeholder text.
-Never mention AI, artificial intelligence, Gemini, language models, or that this content was generated or written by software. Write as a human author.`;
+Never mention AI, artificial intelligence, language models, or that this content was generated or written by software. Write as a human author.`;
 }
 
-async function callGemini(env: WorkerEnv, system: string, user: string): Promise<string> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { maxOutputTokens: 8192 },
-      }),
-    }
-  );
-  if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text()}`);
-  const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
-  return data.candidates[0]?.content?.parts[0]?.text ?? '';
+async function callAI(env: WorkerEnv, system: string, user: string): Promise<string> {
+  const result = await env.AI.run('@cf/meta/llama-3.3-70b-instruct-fp8-fast', {
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    max_tokens: 8192,
+  }) as { response?: string };
+  return result.response ?? '';
 }
 
 function stripMarkdown(text: string): string {
   return text
-    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^#{1,6}\s+/gm, '') // remove heading markers (## Title) but NOT hashtags (#Tag)
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
@@ -57,7 +50,7 @@ Do NOT write promotional content, product pitches, or make the brand the subject
 Format in clean HTML. Use <h1> for the title, <h2> for section headings, <p> for paragraphs.
 IMPORTANT: Return ONLY the article content tags — start directly with <h1>. Do NOT include <!DOCTYPE>, <html>, <head>, <body>, or any wrapper tags. No markdown — no #, ##, **, *, or backtick characters. Aim for 1400-2000 words.`;
 
-  const rawText = await callGemini(env, system, user);
+  const rawText = await callAI(env, system, user);
   // Strip full HTML document wrapper if Gemini returns one
   const bodyMatch = rawText.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   const text = bodyMatch ? bodyMatch[1].trim() : rawText.replace(/<!DOCTYPE[^>]*>|<html[^>]*>|<\/html>|<head>[\s\S]*?<\/head>|<body[^>]*>|<\/body>/gi, '').trim();
@@ -91,7 +84,7 @@ IMPORTANT: Return ONLY the article content tags — start directly with <h1>. Do
     status,
     scheduledFor,
     publishedAt,
-    aiModel: 'gemini-2.5-flash',
+    aiModel: 'llama-3.3-70b',
   });
 
   return id;
@@ -101,19 +94,18 @@ export async function generateSocialPosts(env: WorkerEnv, brand: Brand & BrandSe
   const system = buildSystemPrompt(brand);
   const platformGuide: Record<string, string> = {
     linkedin: 'Professional thought-leadership tone. 150-300 words. Start with a hook. End the post with 3-5 relevant hashtags on a new line.',
-    facebook: 'Conversational, engaging. 100-250 words. Encourage interaction. End the post with 3-5 relevant hashtags on a new line.',
-    bluesky: 'Concise, punchy. Max 300 characters. Conversational and authentic. No hashtag spam — 1-2 max.',
-    mastodon: 'Thoughtful and community-oriented. Up to 500 chars. Relevant hashtags welcome (2-4).',
+    facebook: 'Conversational, engaging. 100-250 words. Encourage interaction. End the post with a new line containing 5-8 hashtags using the # symbol (e.g. #VetLife #PetCare #Telehealth).',
+    bluesky: 'Concise, punchy. Max 300 characters. Conversational and authentic. Include 1-2 hashtags using the # symbol.',
+    mastodon: 'Thoughtful and community-oriented. Up to 500 chars. Include 2-4 hashtags using the # symbol.',
   };
 
   const user = `Write ${count} social media post(s) for ${platform.toUpperCase()}${topic ? ` about: ${topic}` : ` for ${brand.name}`}.
 ${platformGuide[platform] || ''}
 Separate multiple posts with ---
 Do not number them or add labels.
-Write in plain text only — no markdown formatting, no asterisks for bold, no underscores for emphasis.
-Hashtags should use the # character (e.g. #marketing #business).`;
+Write in plain text only — no asterisks for bold, no underscores for emphasis. Hashtags must use the # symbol (e.g. #Example).`;
 
-  const text = await callGemini(env, system, user);
+  const text = await callAI(env, system, user);
   const posts = count > 1 ? text.split(/\n---\n/).map(p => stripMarkdown(p)).filter(Boolean) : [stripMarkdown(text)];
 
   // Look up connected social account for this platform
@@ -132,7 +124,7 @@ Hashtags should use the # character (e.g. #marketing #business).`;
       status: shouldSchedule && account ? 'scheduled' : 'draft',
       scheduledFor: shouldSchedule && account ? Math.floor(Date.now() / 1000) + 300 : undefined,
       socialAccountId: account?.id,
-      aiModel: 'gemini-2.5-flash',
+      aiModel: 'llama-3.3-70b',
     });
     ids.push(id);
   }
@@ -148,7 +140,7 @@ PREVIEW: <preview text under 90 chars>
 ---
 <full email body in HTML — use simple inline styles, no external CSS>`;
 
-  const text = await callGemini(env, system, user);
+  const text = await callAI(env, system, user);
   const subjectMatch = text.match(/^SUBJECT:\s*(.+)$/m);
   const title = subjectMatch?.[1]?.trim() ?? `Newsletter from ${brand.name}`;
 
@@ -158,7 +150,7 @@ PREVIEW: <preview text under 90 chars>
     title,
     body: text,
     status: 'draft',
-    aiModel: 'gemini-2.5-flash',
+    aiModel: 'llama-3.3-70b',
   });
 
   return id;

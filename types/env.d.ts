@@ -1,0 +1,20 @@
+export interface Env {
+  DB: D1Database;
+  MEDIA_BUCKET: R2Bucket;
+  SESSION_KV: KVNamespace;
+  CONTENT_GENERATION_QUEUE: Queue;
+  CONTENT_PUBLISHING_QUEUE: Queue;
+  SOCIAL_POSTING_QUEUE: Queue;
+  ANALYTICS_SYNC_QUEUE: Queue;
+  EMAIL_DISPATCH_QUEUE: Queue;
+  SEO_TASKS_QUEUE: Queue;
+  ENVIRONMENT: string;
+  OWNER_EMAIL: string;
+  OWNER_PASSWORD_HASH: string;
+  SESSION_SECRET: string;
+  ENCRYPTION_KEY: string;
+  AI: Ai;
+  AWS_ACCESS_KEY_ID: string;
+  AWS_SECRET_ACCESS_KEY: string;
+  AWS_SES_REGION: string;
+}

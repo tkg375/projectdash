@@ -1,0 +1,97 @@
+account_id = "3869ffbbf462deee55a7a0b1880ffb84"
+name = "project-dash-workers"
+main = "index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "project-dash-db"
+database_id = "b5dbba82-b2c2-4943-919b-f549b2054e1f"
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "project-dash-media"
+
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "90f191fd4ae04a1fbb69f2ccfafd48e1"
+
+# Queue producers (send to these queues from cron)
+[[queues.producers]]
+queue = "content-generation"
+binding = "CONTENT_GENERATION_QUEUE"
+
+[[queues.producers]]
+queue = "content-publishing"
+binding = "CONTENT_PUBLISHING_QUEUE"
+
+[[queues.producers]]
+queue = "social-posting"
+binding = "SOCIAL_POSTING_QUEUE"
+
+[[queues.producers]]
+queue = "analytics-sync"
+binding = "ANALYTICS_SYNC_QUEUE"
+
+[[queues.producers]]
+queue = "email-dispatch"
+binding = "EMAIL_DISPATCH_QUEUE"
+
+[[queues.producers]]
+queue = "seo-tasks"
+binding = "SEO_TASKS_QUEUE"
+
+# Queue consumers (this worker processes all queues)
+[[queues.consumers]]
+queue = "content-generation"
+max_batch_size = 5
+max_batch_timeout = 30
+max_retries = 3
+
+[[queues.consumers]]
+queue = "content-publishing"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 5
+
+[[queues.consumers]]
+queue = "social-posting"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+
+[[queues.consumers]]
+queue = "analytics-sync"
+max_batch_size = 20
+max_batch_timeout = 60
+max_retries = 2
+
+[[queues.consumers]]
+queue = "email-dispatch"
+max_batch_size = 1
+max_batch_timeout = 60
+max_retries = 2
+
+[[queues.consumers]]
+queue = "seo-tasks"
+max_batch_size = 5
+max_batch_timeout = 60
+max_retries = 3
+
+[triggers]
+crons = [
+  "0 6 * * *",
+  "*/10 * * * *",
+  "0 3 * * 1",
+  "0 7 * * *"
+]
+
+[vars]
+ENVIRONMENT = "production"
+
+# All secrets shared with the main app worker
+# Set via: npx wrangler secret put <NAME> --config workers/wrangler.toml
