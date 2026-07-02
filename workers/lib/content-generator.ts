@@ -1,6 +1,81 @@
 import type { WorkerEnv, Brand, BrandSettings } from './types';
-import { saveContent, updateContentStatus } from './db';
+import { saveContent, updateContentStatus, saveMediaAsset } from './db';
 import { generateId } from './crypto';
+
+const KLING_BASE_URL = 'https://api-singapore.klingai.com';
+
+async function pollKlingTask(env: WorkerEnv, taskId: string): Promise<string> {
+  const maxAttempts = 30; // ~5 min at 10s intervals
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(`${KLING_BASE_URL}/v1/videos/text2video/${taskId}`, {
+      headers: { Authorization: `Bearer ${env.KLING_API_KEY}` },
+    });
+    if (!res.ok) throw new Error(`Kling status check failed: ${res.status}`);
+    const data = await res.json() as {
+      data?: { task_status?: string; task_result?: { videos?: Array<{ url: string }> } };
+    };
+    const status = data.data?.task_status;
+    if (status === 'succeed') {
+      const url = data.data?.task_result?.videos?.[0]?.url;
+      if (!url) throw new Error('Kling task succeeded but returned no video URL');
+      return url;
+    }
+    if (status === 'failed') throw new Error('Kling video generation failed');
+    await new Promise(resolve => setTimeout(resolve, 10_000));
+  }
+  throw new Error('Kling video generation timed out');
+}
+
+export async function generateVideoAd(env: WorkerEnv, brand: Brand & BrandSettings, prompt: string, opts?: { durationSeconds?: 5 | 10; aspectRatio?: '9:16' | '16:9' | '1:1' }): Promise<string> {
+  const submitRes = await fetch(`${KLING_BASE_URL}/v1/videos/text2video`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.KLING_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'kling-v2.6-pro',
+      prompt,
+      duration: String(opts?.durationSeconds ?? 5),
+      aspect_ratio: opts?.aspectRatio ?? '9:16',
+    }),
+  });
+  if (!submitRes.ok) throw new Error(`Kling submit failed: ${submitRes.status} ${await submitRes.text()}`);
+  const submitData = await submitRes.json() as { data?: { task_id?: string } };
+  const taskId = submitData.data?.task_id;
+  if (!taskId) throw new Error('Kling submit did not return a task_id');
+
+  const videoUrl = await pollKlingTask(env, taskId);
+
+  const videoRes = await fetch(videoUrl);
+  if (!videoRes.ok) throw new Error(`Failed to download generated video: ${videoRes.status}`);
+  const videoBytes = await videoRes.arrayBuffer();
+
+  const r2Key = `videos/${brand.id}/${generateId()}.mp4`;
+  await env.MEDIA_BUCKET.put(r2Key, videoBytes, { httpMetadata: { contentType: 'video/mp4' } });
+
+  const contentId = await saveContent(env, {
+    brandId: brand.id,
+    contentType: 'video',
+    platform: 'tiktok',
+    title: prompt.slice(0, 100),
+    body: prompt,
+    status: 'draft',
+    aiModel: 'kling-v2.6-pro',
+  });
+
+  await saveMediaAsset(env, {
+    brandId: brand.id,
+    r2Key,
+    filename: r2Key.split('/').pop()!,
+    mimeType: 'video/mp4',
+    fileSizeBytes: videoBytes.byteLength,
+    source: 'kling',
+    contentItemId: contentId,
+  });
+
+  return contentId;
+}
 
 function buildSystemPrompt(brand: Brand & BrandSettings): string {
   const voice = JSON.parse(brand.brand_voice || '{}');

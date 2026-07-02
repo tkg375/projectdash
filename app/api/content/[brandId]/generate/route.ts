@@ -7,7 +7,7 @@ import { requireAuth, assertBrandOwner } from '@/lib/auth';
 export const dynamic = 'force-dynamic';
 
 const GenerateSchema = z.object({
-  content_type: z.enum(['blog', 'social', 'email']),
+  content_type: z.enum(['blog', 'social', 'email', 'video']),
   platform: z.string().optional(),
   topic: z.string().optional(),
   keyword: z.string().optional(),
@@ -34,6 +34,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bra
       `SELECT b.*, bs.auto_publish FROM brands b LEFT JOIN brand_settings bs ON bs.brand_id = b.id WHERE b.id = ?`
     ).bind(brandId).first() as Record<string, unknown> | null;
     if (!brand) return NextResponse.json({ error: 'Brand not found' }, { status: 404 });
+
+    // Video generation via Kling takes minutes — hand off to the queue instead of blocking the request
+    if (data.content_type === 'video') {
+      if (!data.topic) return NextResponse.json({ error: 'A topic/prompt is required for video generation' }, { status: 400 });
+      const jobId = generateId();
+      await (env as unknown as { CONTENT_GENERATION_QUEUE: Queue }).CONTENT_GENERATION_QUEUE.send({
+        jobId,
+        jobType: 'generate_content',
+        brandId,
+        payload: { contentType: 'video', topic: data.topic },
+      });
+      return NextResponse.json({ jobId, status: 'queued' }, { status: 202 });
+    }
 
     const brandVoice = JSON.parse(brand.brand_voice as string || '{}');
 

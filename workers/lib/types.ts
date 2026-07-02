@@ -27,6 +27,7 @@ export interface WorkerEnv {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   SERPER_API_KEY: string;
+  KLING_API_KEY: string;
 }
 
 export type QueueJobType =

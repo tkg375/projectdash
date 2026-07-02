@@ -60,6 +60,26 @@ export async function saveContent(env: WorkerEnv, item: {
   return id;
 }
 
+export async function saveMediaAsset(env: WorkerEnv, asset: {
+  brandId: string;
+  r2Key: string;
+  filename: string;
+  mimeType: string;
+  fileSizeBytes?: number;
+  source?: string;
+  contentItemId?: string;
+}): Promise<string> {
+  const id = generateId();
+  await env.DB.prepare(
+    `INSERT INTO media_assets (id, brand_id, r2_key, filename, mime_type, file_size_bytes, source, content_item_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    id, asset.brandId, asset.r2Key, asset.filename, asset.mimeType,
+    asset.fileSizeBytes ?? null, asset.source ?? 'kling', asset.contentItemId ?? null
+  ).run();
+  return id;
+}
+
 export async function updateContentStatus(env: WorkerEnv, id: string, status: string, extra: Record<string, unknown> = {}): Promise<void> {
   const fields = ['status = ?'];
   const values: unknown[] = [status];

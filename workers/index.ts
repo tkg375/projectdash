@@ -1,6 +1,6 @@
 import type { WorkerEnv, QueueMessage } from './lib/types';
 import { runScheduled } from './lib/scheduler';
-import { generateBlogPost, generateSocialPosts, generateEmailNewsletter, publishContentToCms } from './lib/content-generator';
+import { generateBlogPost, generateSocialPosts, generateEmailNewsletter, generateVideoAd, publishContentToCms } from './lib/content-generator';
 import { dispatchSocialPost } from './lib/social-poster';
 import { checkKeywordRankings, generateSeoArticle } from './lib/seo';
 import { processAnalyticsSync } from './lib/analytics';
@@ -28,6 +28,8 @@ async function processQueueMessage(msg: QueueMessage, env: WorkerEnv): Promise<v
         await generateSocialPosts(env, brand, platform, count ?? 1, topic, forceStatus);
       } else if (contentType === 'email') {
         await generateEmailNewsletter(env, brand, topic);
+      } else if (contentType === 'video' && topic) {
+        await generateVideoAd(env, brand, topic);
       }
       break;
     }
