@@ -70,7 +70,7 @@ max_retries = 5
 [[queues.consumers]]
 queue = "social-posting"
 max_batch_size = 10
-max_batch_timeout = 30
+max_batch_timeout = 0 # deliver right away so "post now" isn't held for batching
 max_retries = 3
 
 [[queues.consumers]]
