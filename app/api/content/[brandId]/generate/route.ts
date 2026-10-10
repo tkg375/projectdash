@@ -3,11 +3,12 @@ import { getDb, getEnv } from '@/lib/db';
 import { generateId } from '@/lib/crypto';
 import { z } from 'zod';
 import { requireAuth, assertBrandOwner } from '@/lib/auth';
+import { armPostTimer } from '@/lib/post-timer';
 
 export const dynamic = 'force-dynamic';
 
 const GenerateSchema = z.object({
-  content_type: z.enum(['blog', 'social', 'email', 'video']),
+  content_type: z.enum(['blog', 'social', 'email']),
   platform: z.string().optional(),
   topic: z.string().optional(),
   keyword: z.string().optional(),
@@ -34,19 +35,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ bra
       `SELECT b.*, bs.auto_publish FROM brands b LEFT JOIN brand_settings bs ON bs.brand_id = b.id WHERE b.id = ?`
     ).bind(brandId).first() as Record<string, unknown> | null;
     if (!brand) return NextResponse.json({ error: 'Brand not found' }, { status: 404 });
-
-    // Video generation via Kling takes minutes — hand off to the queue instead of blocking the request
-    if (data.content_type === 'video') {
-      if (!data.topic) return NextResponse.json({ error: 'A topic/prompt is required for video generation' }, { status: 400 });
-      const jobId = generateId();
-      await (env as unknown as { CONTENT_GENERATION_QUEUE: Queue }).CONTENT_GENERATION_QUEUE.send({
-        jobId,
-        jobType: 'generate_content',
-        brandId,
-        payload: { contentType: 'video', topic: data.topic },
-      });
-      return NextResponse.json({ jobId, status: 'queued' }, { status: 202 });
-    }
 
     const brandVoice = JSON.parse(brand.brand_voice as string || '{}');
 
@@ -163,7 +151,8 @@ Include: subject line (prefix with "SUBJECT: "), preview text (prefix with "PREV
         }
       } else {
         status = 'scheduled';
-        if (!scheduledFor) scheduledFor = now + 10;
+        // No time given means post now — the timer fires immediately
+        if (!scheduledFor) scheduledFor = now;
       }
     } else if (data.force_status === 'draft') {
       status = 'draft';
@@ -173,7 +162,7 @@ Include: subject line (prefix with "SUBJECT: "), preview text (prefix with "PREV
       // Fall back to auto_publish logic
       if (data.content_type === 'social' && socialAccountId) {
         status = 'scheduled';
-        scheduledFor = now + 300;
+        scheduledFor = now;
       } else if (data.content_type === 'blog') {
         // Publish immediately — no external CMS needed
         status = 'published';
@@ -188,6 +177,7 @@ Include: subject line (prefix with "SUBJECT: "), preview text (prefix with "PREV
       `INSERT INTO content_items (id, brand_id, content_type, platform, title, body, status, scheduled_for, published_at, social_account_id, ai_model)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'llama-3.3-70b')`
     ).bind(id, brandId, data.content_type, data.content_type === 'social' ? (data.platform ?? null) : null, title, contentBody, status, scheduledFor, publishedAt, socialAccountId).run();
+    if (status === 'scheduled') await armPostTimer(id, scheduledFor ?? now);
 
     return NextResponse.json({ id, title, body: contentBody, status }, { status: 201 });
   } catch (err) {

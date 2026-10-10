@@ -8,6 +8,7 @@ export interface WorkerEnv {
   ANALYTICS_SYNC_QUEUE: Queue;
   EMAIL_DISPATCH_QUEUE: Queue;
   SEO_TASKS_QUEUE: Queue;
+  POST_TIMER: DurableObjectNamespace<import('./post-timer').PostTimer>;
   ENVIRONMENT: string;
   APP_URL: string;
   OWNER_EMAIL: string;
@@ -27,7 +28,6 @@ export interface WorkerEnv {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   SERPER_API_KEY: string;
-  KLING_API_KEY: string;
 }
 
 export type QueueJobType =

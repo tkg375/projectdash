@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { requireAuth, assertBrandOwner } from '@/lib/auth';
+import { armPostTimer } from '@/lib/post-timer';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ br
   await db.prepare(
     `UPDATE content_items SET scheduled_for = ?, status = 'scheduled', updated_at = unixepoch() WHERE id = ? AND brand_id = ?`
   ).bind(body.scheduled_for, id, brandId).run();
+  await armPostTimer(id, body.scheduled_for);
   return NextResponse.json({ success: true });
 }
 

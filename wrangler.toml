@@ -47,6 +47,12 @@ binding = "EMAIL_DISPATCH_QUEUE"
 queue = "seo-tasks"
 binding = "SEO_TASKS_QUEUE"
 
+# Per-post timers live in the workers script (workers/wrangler.toml)
+[[durable_objects.bindings]]
+name = "POST_TIMER"
+class_name = "PostTimer"
+script_name = "project-dash-workers"
+
 [vars]
 ENVIRONMENT = "production"
 APP_URL = "https://project-dash.tgordo03.workers.dev"
@@ -60,4 +66,3 @@ APP_URL = "https://project-dash.tgordo03.workers.dev"
 # FACEBOOK_APP_ID, FACEBOOK_APP_SECRET
 # GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 # SERPER_API_KEY
-# KLING_API_KEY

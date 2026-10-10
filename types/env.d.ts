@@ -8,6 +8,7 @@ export interface Env {
   ANALYTICS_SYNC_QUEUE: Queue;
   EMAIL_DISPATCH_QUEUE: Queue;
   SEO_TASKS_QUEUE: Queue;
+  POST_TIMER: DurableObjectNamespace;
   ENVIRONMENT: string;
   OWNER_EMAIL: string;
   OWNER_PASSWORD_HASH: string;

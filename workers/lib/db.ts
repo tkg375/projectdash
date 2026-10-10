@@ -1,5 +1,6 @@
 import type { WorkerEnv, Brand, BrandSettings, SocialAccount, ContentItem } from './types';
 import { generateId } from './crypto';
+import { armPostTimer } from './post-timer';
 
 export async function getActiveBrands(env: WorkerEnv): Promise<(Brand & BrandSettings)[]> {
   const result = await env.DB.prepare(
@@ -57,26 +58,9 @@ export async function saveContent(env: WorkerEnv, item: {
     item.body, item.status ?? 'draft', item.scheduledFor ?? null, item.publishedAt ?? null,
     item.socialAccountId ?? null, item.cmsCconnectionId ?? null, item.aiModel ?? null
   ).run();
-  return id;
-}
-
-export async function saveMediaAsset(env: WorkerEnv, asset: {
-  brandId: string;
-  r2Key: string;
-  filename: string;
-  mimeType: string;
-  fileSizeBytes?: number;
-  source?: string;
-  contentItemId?: string;
-}): Promise<string> {
-  const id = generateId();
-  await env.DB.prepare(
-    `INSERT INTO media_assets (id, brand_id, r2_key, filename, mime_type, file_size_bytes, source, content_item_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(
-    id, asset.brandId, asset.r2Key, asset.filename, asset.mimeType,
-    asset.fileSizeBytes ?? null, asset.source ?? 'kling', asset.contentItemId ?? null
-  ).run();
+  if (item.status === 'scheduled') {
+    await armPostTimer(env, id, item.scheduledFor ?? Math.floor(Date.now() / 1000));
+  }
   return id;
 }
 

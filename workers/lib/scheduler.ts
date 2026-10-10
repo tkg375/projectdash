@@ -6,19 +6,16 @@ import { queueAnalyticsSync } from './analytics';
 import { scheduleCampaignSend } from './email';
 import { generateId } from './crypto';
 import { getScheduledContent } from './db';
-import { dispatchSocialPost } from './social-poster';
+import { releaseContentItem } from './release';
 
 export async function runScheduled(cron: string, env: WorkerEnv): Promise<void> {
   console.log(`[Scheduler] Running cron: ${cron}`);
 
   switch (cron) {
-    // 6am daily — queue content generation for all brands
-    case '0 6 * * *':
+    // 16:00 UTC daily (noon Eastern in summer, 11am in winter) — generate and auto-post content
+    // for all brands, then sweep any scheduled item whose timer didn't fire
+    case '0 16 * * *':
       await contentSchedulerJob(env);
-      break;
-
-    // Every 10min — check for scheduled content ready to publish
-    case '*/10 * * * *':
       await publishSchedulerJob(env);
       break;
 
@@ -131,68 +128,13 @@ async function contentSchedulerJob(env: WorkerEnv): Promise<void> {
   }
 }
 
+// Backstop sweep — each scheduled item has its own PostTimer alarm, this only catches stragglers
 async function publishSchedulerJob(env: WorkerEnv): Promise<void> {
   const items = await getScheduledContent(env);
 
   for (const item of items) {
     try {
-      let socialAccountId = item.social_account_id;
-
-      // If this is a social post but social_account_id wasn't set at generation time,
-      // look up the active account for this brand + platform now.
-      if (!socialAccountId && item.content_type === 'social' && item.platform) {
-        const account = await env.DB.prepare(
-          `SELECT id FROM social_accounts WHERE brand_id = ? AND platform = ? AND is_active = 1 LIMIT 1`
-        ).bind(item.brand_id, item.platform).first<{ id: string }>();
-        if (account) {
-          socialAccountId = account.id;
-          // Persist for next time so we don't query on every tick
-          await env.DB.prepare(
-            `UPDATE content_items SET social_account_id = ? WHERE id = ?`
-          ).bind(socialAccountId, item.id).run();
-        }
-      }
-
-      if (socialAccountId) {
-        // Mark as queued immediately so the next cron tick doesn't re-pick it
-        await env.DB.prepare(
-          `UPDATE content_items SET status = 'queued', updated_at = unixepoch() WHERE id = ?`
-        ).bind(item.id).run();
-        await env.SOCIAL_POSTING_QUEUE.send({
-          jobId: generateId(),
-          jobType: 'post_social',
-          brandId: item.brand_id,
-          payload: { contentItemId: item.id, socialAccountId },
-        });
-      } else if (item.cms_connection_id) {
-        // Mark as queued immediately so the next cron tick doesn't re-pick it
-        await env.DB.prepare(
-          `UPDATE content_items SET status = 'queued', updated_at = unixepoch() WHERE id = ?`
-        ).bind(item.id).run();
-        await env.CONTENT_PUBLISHING_QUEUE.send({
-          jobId: generateId(),
-          jobType: 'publish_content',
-          brandId: item.brand_id,
-          payload: { contentItemId: item.id },
-        });
-      } else if (item.content_type === 'social') {
-        // Social post with no connected account — mark failed so it doesn't loop
-        console.warn(`[PublishScheduler] Social item ${item.id} (${item.platform ?? 'n/a'}) has no connected account — marking failed`);
-        await env.DB.prepare(
-          `UPDATE content_items SET status = 'failed', updated_at = unixepoch() WHERE id = ?`
-        ).bind(item.id).run();
-      } else if (item.content_type === 'blog' || item.content_type === 'email') {
-        // Blog/email lives in D1 — publishing means marking published directly
-        console.log(`[PublishScheduler] Publishing ${item.content_type} item ${item.id} directly`);
-        await env.DB.prepare(
-          `UPDATE content_items SET status = 'published', published_at = unixepoch(), scheduled_for = NULL, updated_at = unixepoch() WHERE id = ?`
-        ).bind(item.id).run();
-      } else {
-        // Unknown type with no delivery target — revert to draft
-        await env.DB.prepare(
-          `UPDATE content_items SET status = 'draft', scheduled_for = NULL, updated_at = unixepoch() WHERE id = ?`
-        ).bind(item.id).run();
-      }
+      await releaseContentItem(env, item);
     } catch (err) {
       console.error(`[PublishScheduler] Item ${item.id} failed:`, err);
     }

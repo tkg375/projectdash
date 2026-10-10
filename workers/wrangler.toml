@@ -45,6 +45,15 @@ binding = "EMAIL_DISPATCH_QUEUE"
 queue = "seo-tasks"
 binding = "SEO_TASKS_QUEUE"
 
+# Per-post timers: fire each scheduled post at its exact time
+[[durable_objects.bindings]]
+name = "POST_TIMER"
+class_name = "PostTimer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PostTimer"]
+
 # Queue consumers (this worker processes all queues)
 [[queues.consumers]]
 queue = "content-generation"
@@ -84,8 +93,7 @@ max_retries = 3
 
 [triggers]
 crons = [
-  "0 6 * * *",
-  "*/10 * * * *",
+  "0 16 * * *",
   "0 3 * * 1",
   "0 7 * * *"
 ]
