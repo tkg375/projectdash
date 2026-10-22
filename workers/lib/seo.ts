@@ -1,5 +1,5 @@
 import type { WorkerEnv, Brand, BrandSettings } from './types';
-import { getKeywordsForRankCheck, saveKeywordRanking, saveContent } from './db';
+import { getKeywordsForRankCheck, saveKeywordRanking, saveContent, getActiveCmsConnectionId } from './db';
 import { generateId } from './crypto';
 
 // ── Rank Checking via Serper.dev ──────────────────────────────────────────────
@@ -102,6 +102,7 @@ Requirements:
     body: text,
     status: brand.auto_publish ? 'scheduled' : 'draft',
     scheduledFor: brand.auto_publish ? Math.floor(Date.now() / 1000) + 600 : undefined,
+    cmsCconnectionId: (await getActiveCmsConnectionId(env, brand.id)) ?? undefined,
     aiModel: 'llama-3.3-70b',
   });
 

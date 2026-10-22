@@ -1,5 +1,6 @@
 import type { WorkerEnv, ContentItem } from './types';
 import { generateId } from './crypto';
+import { getActiveCmsConnectionId } from './db';
 
 // Sends a due 'scheduled' item on its way: social posts and CMS items go to their queues,
 // blog/email items (which live in D1) are marked published directly.
@@ -20,6 +21,17 @@ export async function releaseContentItem(env: WorkerEnv, item: ContentItem): Pro
     }
   }
 
+  // Blog drafts made before the brand's CMS connection existed pick it up at release time.
+  let cmsConnectionId = item.cms_connection_id;
+  if (!cmsConnectionId && item.content_type === 'blog') {
+    cmsConnectionId = await getActiveCmsConnectionId(env, item.brand_id);
+    if (cmsConnectionId) {
+      await env.DB.prepare(
+        `UPDATE content_items SET cms_connection_id = ? WHERE id = ?`
+      ).bind(cmsConnectionId, item.id).run();
+    }
+  }
+
   if (socialAccountId) {
     // Mark as queued immediately so nothing else re-picks it
     await env.DB.prepare(
@@ -31,7 +43,7 @@ export async function releaseContentItem(env: WorkerEnv, item: ContentItem): Pro
       brandId: item.brand_id,
       payload: { contentItemId: item.id, socialAccountId },
     });
-  } else if (item.cms_connection_id) {
+  } else if (cmsConnectionId) {
     await env.DB.prepare(
       `UPDATE content_items SET status = 'queued', updated_at = unixepoch() WHERE id = ?`
     ).bind(item.id).run();

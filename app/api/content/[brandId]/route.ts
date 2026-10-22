@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb, hasCmsConnection } from '@/lib/db';
 import { requireAuth, assertBrandOwner } from '@/lib/auth';
 import { armPostTimer } from '@/lib/post-timer';
 
@@ -44,6 +44,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ br
   const body = await req.json() as { scheduled_for?: number; publish?: boolean };
   const db = await getDb();
   if (body.publish) {
+    // A blog post for a brand with a CMS connection goes out through the timer → release →
+    // content-publishing queue, which delivers it to the connected site.
+    const item = await db.prepare(`SELECT content_type FROM content_items WHERE id = ? AND brand_id = ?`)
+      .bind(id, brandId).first<{ content_type: string }>();
+    if (item?.content_type === 'blog' && await hasCmsConnection(brandId)) {
+      const now = Math.floor(Date.now() / 1000);
+      await db.prepare(
+        `UPDATE content_items SET scheduled_for = ?, status = 'scheduled', updated_at = unixepoch() WHERE id = ? AND brand_id = ?`
+      ).bind(now, id, brandId).run();
+      await armPostTimer(id, now);
+      return NextResponse.json({ success: true });
+    }
     await db.prepare(
       `UPDATE content_items SET status = 'published', published_at = unixepoch(), scheduled_for = NULL, updated_at = unixepoch() WHERE id = ? AND brand_id = ?`
     ).bind(id, brandId).run();

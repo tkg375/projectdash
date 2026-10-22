@@ -28,6 +28,14 @@ export async function getActiveSocialAccounts(env: WorkerEnv, brandId: string): 
   return result.results;
 }
 
+// Blog posts for a brand with an active CMS connection are delivered there instead of living only in D1.
+export async function getActiveCmsConnectionId(env: WorkerEnv, brandId: string): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT id FROM cms_connections WHERE brand_id = ? AND is_active = 1 ORDER BY created_at LIMIT 1`
+  ).bind(brandId).first<{ id: string }>();
+  return row?.id ?? null;
+}
+
 export async function getScheduledContent(env: WorkerEnv): Promise<ContentItem[]> {
   const now = Math.floor(Date.now() / 1000);
   const result = await env.DB.prepare(

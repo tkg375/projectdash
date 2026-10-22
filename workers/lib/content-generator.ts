@@ -1,5 +1,5 @@
 import type { WorkerEnv, Brand, BrandSettings } from './types';
-import { saveContent, updateContentStatus } from './db';
+import { saveContent, updateContentStatus, getActiveCmsConnectionId } from './db';
 import { generateId } from './crypto';
 
 function buildSystemPrompt(brand: Brand & BrandSettings): string {
@@ -57,7 +57,10 @@ IMPORTANT: Return ONLY the article content tags — start directly with <h1>. Do
   const titleMatch = text.match(/<h1[^>]*>(.+?)<\/h1>/i);
   const title = titleMatch?.[1]?.replace(/<[^>]+>/g, '') ?? null;
 
-  // Blog posts live in D1 — publishing = marking published directly, no external CMS needed
+  // Blog posts live in D1 — publishing = marking published directly, unless the brand has a
+  // CMS connection, in which case "publish now" means scheduling for now so the release path
+  // hands it to the content-publishing queue.
+  const cmsConnectionId = await getActiveCmsConnectionId(env, brand.id);
   let status: string;
   let scheduledFor: number | undefined;
   let publishedAt: number | undefined;
@@ -65,13 +68,15 @@ IMPORTANT: Return ONLY the article content tags — start directly with <h1>. Do
 
   if (forceStatus === 'draft') {
     status = 'draft';
-  } else if (forceStatus === 'scheduled') {
+  } else if (forceStatus === 'scheduled' || brand.auto_publish) {
     // Treat as publish now
-    status = 'published';
-    publishedAt = nowSec;
-  } else if (brand.auto_publish) {
-    status = 'published';
-    publishedAt = nowSec;
+    if (cmsConnectionId) {
+      status = 'scheduled';
+      scheduledFor = nowSec;
+    } else {
+      status = 'published';
+      publishedAt = nowSec;
+    }
   } else {
     status = 'draft';
   }
@@ -84,6 +89,7 @@ IMPORTANT: Return ONLY the article content tags — start directly with <h1>. Do
     status,
     scheduledFor,
     publishedAt,
+    cmsCconnectionId: cmsConnectionId ?? undefined,
     aiModel: 'llama-3.3-70b',
   });
 
@@ -242,9 +248,10 @@ export async function runContentScheduler(env: WorkerEnv, brand: Brand & BrandSe
   }
 }
 
-export async function publishContentToCms(env: WorkerEnv, item: { id: string; brand_id: string; title: string | null; body: string; cms_connection_id: string }): Promise<void> {
+export async function publishContentToCms(env: WorkerEnv, item: { id: string; brand_id: string; title: string | null; body: string; excerpt: string | null; cms_connection_id: string }): Promise<void> {
   const conn = await env.DB.prepare(`SELECT * FROM cms_connections WHERE id = ?`).bind(item.cms_connection_id).first<{
     cms_type: string; endpoint_url: string; auth_type: string; auth_credentials: string;
+    default_category: string | null; auto_publish: number;
   }>();
   if (!conn) throw new Error('CMS connection not found');
 
@@ -276,9 +283,23 @@ export async function publishContentToCms(env: WorkerEnv, item: { id: string; br
         'Content-Type': 'application/json',
         ...(creds.secret ? { 'X-Webhook-Secret': creds.secret } : {}),
       },
-      body: JSON.stringify({ title: item.title, body: item.body, timestamp: now }),
+      body: JSON.stringify({
+        external_id: item.id,
+        title: item.title,
+        body: item.body,
+        excerpt: item.excerpt,
+        category: conn.default_category,
+        // auto_publish off = the receiving site keeps it as a draft for review
+        publish: !!conn.auto_publish,
+        timestamp: now,
+      }),
     });
     if (!res.ok) throw new Error(`Webhook publish failed: ${res.status}`);
-    await updateContentStatus(env, item.id, 'published', { published_at: now });
+    const post = await res.json().catch(() => ({})) as { id?: number | string; url?: string };
+    await updateContentStatus(env, item.id, 'published', {
+      published_at: now,
+      external_id: post.id != null ? String(post.id) : undefined,
+      external_url: post.url,
+    });
   }
 }

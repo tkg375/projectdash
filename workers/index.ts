@@ -37,7 +37,7 @@ async function processQueueMessage(msg: QueueMessage, env: WorkerEnv): Promise<v
     case 'publish_content': {
       const { contentItemId } = payload as { contentItemId: string };
       const item = await env.DB.prepare(`SELECT * FROM content_items WHERE id = ?`).bind(contentItemId).first<{
-        id: string; brand_id: string; title: string | null; body: string; cms_connection_id: string | null;
+        id: string; brand_id: string; title: string | null; body: string; excerpt: string | null; cms_connection_id: string | null;
       }>();
       if (!item) throw new Error('Content item not found');
       if (!item.cms_connection_id) throw new Error('No CMS connection');

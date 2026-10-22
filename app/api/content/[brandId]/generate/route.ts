@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getEnv } from '@/lib/db';
+import { getDb, getEnv, hasCmsConnection } from '@/lib/db';
 import { generateId } from '@/lib/crypto';
 import { z } from 'zod';
 import { requireAuth, assertBrandOwner } from '@/lib/auth';
@@ -139,7 +139,11 @@ Include: subject line (prefix with "SUBJECT: "), preview text (prefix with "PREV
       if (data.content_type === 'social' && !socialAccountId) {
         return NextResponse.json({ error: `No connected ${data.platform} account for this brand. Connect one in the Social tab first.` }, { status: 400 });
       }
-      if (data.content_type === 'blog') {
+      if (data.content_type === 'blog' && await hasCmsConnection(brandId)) {
+        // Delivered to the brand's connected site by the release path
+        status = 'scheduled';
+        if (!scheduledFor) scheduledFor = now;
+      } else if (data.content_type === 'blog') {
         // Blog posts live in D1 — publishing means marking published directly
         if (scheduledFor && scheduledFor > now) {
           // Future schedule: let the scheduler flip it to published at the right time
@@ -161,6 +165,9 @@ Include: subject line (prefix with "SUBJECT: "), preview text (prefix with "PREV
     } else if (brand.auto_publish) {
       // Fall back to auto_publish logic
       if (data.content_type === 'social' && socialAccountId) {
+        status = 'scheduled';
+        scheduledFor = now;
+      } else if (data.content_type === 'blog' && await hasCmsConnection(brandId)) {
         status = 'scheduled';
         scheduledFor = now;
       } else if (data.content_type === 'blog') {
